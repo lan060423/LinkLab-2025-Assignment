@@ -285,17 +285,18 @@ void FLE_cc(const std::vector<std::string>& options)
         }
 
         // 设置节标志
-        uint32_t sh_flags = static_cast<uint32_t>(SHF::ALLOC);
+        uint32_t sh_flags = 0;
+        sh_flags |= SHF::ALLOC;
         if (contains(flags, "WRITE")) {
-            sh_flags |= static_cast<uint32_t>(SHF::WRITE);
+            sh_flags |= SHF::WRITE;
         }
         if (contains(flags, "EXECINSTR")) {
-            sh_flags |= static_cast<uint32_t>(SHF::EXEC);
+            sh_flags |= SHF::EXEC;
         }
 
         const bool is_nobits = !contains(flags, "CONTENTS");
         if (is_nobits) {
-            sh_flags |= static_cast<uint32_t>(SHF::NOBITS);
+            sh_flags |= SHF::NOBITS;
         }
 
         // 创建节头

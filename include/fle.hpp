@@ -65,6 +65,71 @@ enum class SHF { // Section Header Flags
     NOBITS = 8, // Takes no space in file (like BSS)
 };
 
+// ================= PHF (Program Header Flags) =================
+
+// Combine two PHFs into a uint32_t directly
+inline uint32_t operator|(PHF lhs, PHF rhs)
+{
+    using T = std::underlying_type_t<PHF>;
+    return static_cast<T>(lhs) | static_cast<T>(rhs);
+}
+
+// Allow checking flags directly: if (flags & PHF::X)
+inline bool operator&(uint32_t lhs, PHF rhs)
+{
+    return (lhs & static_cast<uint32_t>(rhs)) != 0;
+}
+
+inline bool operator&(PHF lhs, uint32_t rhs)
+{
+    return (static_cast<uint32_t>(lhs) & rhs) != 0;
+}
+
+// Allow setting flags directly: flags |= PHF::X
+// Also supports chaining: (PHF::A | PHF::B) | PHF::C -> uint32_t | PHF -> uint32_t
+inline uint32_t operator|(uint32_t lhs, PHF rhs)
+{
+    return lhs | static_cast<uint32_t>(rhs);
+}
+
+inline uint32_t& operator|=(uint32_t& lhs, PHF rhs)
+{
+    lhs |= static_cast<uint32_t>(rhs);
+    return lhs;
+}
+
+// ================= SHF (Section Header Flags) =================
+
+// Combine two SHFs into a uint32_t directly
+inline uint32_t operator|(SHF lhs, SHF rhs)
+{
+    using T = std::underlying_type_t<SHF>;
+    return static_cast<T>(lhs) | static_cast<T>(rhs);
+}
+
+// Allow checking flags directly: if (flags & SHF::ALLOC)
+inline bool operator&(uint32_t lhs, SHF rhs)
+{
+    return (lhs & static_cast<uint32_t>(rhs)) != 0;
+}
+
+inline bool operator&(SHF lhs, uint32_t rhs)
+{
+    return (static_cast<uint32_t>(lhs) & rhs) != 0;
+}
+
+// Allow setting flags directly: flags |= SHF::ALLOC
+inline uint32_t operator|(uint32_t lhs, SHF rhs)
+{
+    return lhs | static_cast<uint32_t>(rhs);
+}
+
+inline uint32_t& operator|=(uint32_t& lhs, SHF rhs)
+{
+    lhs |= static_cast<uint32_t>(rhs);
+    return lhs;
+}
+
 struct SectionHeader {
     std::string name; // Section name
     uint32_t type; // Section type

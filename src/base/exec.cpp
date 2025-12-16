@@ -44,9 +44,9 @@ void FLE_exec(const FLEObject& obj)
 
         // Then, set the final permissions
         mprotect(addr, phdr.size,
-            (phdr.flags & static_cast<uint32_t>(PHF::R) ? PROT_READ : 0)
-                | (phdr.flags & static_cast<uint32_t>(PHF::W) ? PROT_WRITE : 0)
-                | (phdr.flags & static_cast<uint32_t>(PHF::X) ? PROT_EXEC : 0));
+            (phdr.flags & PHF::R ? PROT_READ : 0)
+                | (phdr.flags & PHF::W ? PROT_WRITE : 0)
+                | (phdr.flags & PHF::X ? PROT_EXEC : 0));
     }
 
     using FuncType = int (*)();

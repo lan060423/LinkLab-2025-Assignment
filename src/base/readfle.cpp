@@ -64,13 +64,13 @@ void FLE_readfle(const FLEObject& obj)
 
         // 打印节标志
         std::vector<std::string> flags;
-        if (shdr.flags & static_cast<uint32_t>(SHF::ALLOC))
+        if (shdr.flags & SHF::ALLOC)
             flags.push_back("ALLOC");
-        if (shdr.flags & static_cast<uint32_t>(SHF::WRITE))
+        if (shdr.flags & SHF::WRITE)
             flags.push_back("WRITE");
-        if (shdr.flags & static_cast<uint32_t>(SHF::EXEC))
+        if (shdr.flags & SHF::EXEC)
             flags.push_back("EXEC");
-        if (shdr.flags & static_cast<uint32_t>(SHF::NOBITS))
+        if (shdr.flags & SHF::NOBITS)
             flags.push_back("NOBITS");
 
         std::string flag_str;
@@ -186,11 +186,11 @@ void FLE_readfle(const FLEObject& obj)
                       << std::left << std::setw(10) << format_hex(phdr.size, 4) << " ";
 
             std::vector<std::string> flags;
-            if (phdr.flags & static_cast<uint32_t>(PHF::R))
+            if (phdr.flags & PHF::R)
                 flags.push_back("R");
-            if (phdr.flags & static_cast<uint32_t>(PHF::W))
+            if (phdr.flags & PHF::W)
                 flags.push_back("W");
-            if (phdr.flags & static_cast<uint32_t>(PHF::X))
+            if (phdr.flags & PHF::X)
                 flags.push_back("X");
 
             for (size_t i = 0; i < flags.size(); i++) {
