@@ -16,12 +16,12 @@ args = [
 
 [run.check]
 return_code = 0
-files = ["${build_dir}/main.fle"]
+files = ["${build_dir}/main.fo"]
 
 [[run]]
 name = "Link program"
 command = "${root_dir}/ld"
-args = ["${build_dir}/main.fle", "-o", "${build_dir}/program"]
+args = ["${build_dir}/main.fo", "-o", "${build_dir}/program"]
 
 [run.check]
 files = ["${build_dir}/program"]

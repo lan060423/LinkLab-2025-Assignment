@@ -61,8 +61,8 @@ def judge():
         build_dir = os.path.join(test_dir, "build")
         
         program_path = os.path.join(build_dir, "program")
-        unused_fle_path = os.path.join(build_dir, "unused.fle")
-        used_fle_path = os.path.join(build_dir, "used.fle")
+        unused_fle_path = os.path.join(build_dir, "unused.fo")
+        used_fle_path = os.path.join(build_dir, "used.fo")
         
         try:
             program_fle = load_fle_json(program_path)

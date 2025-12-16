@@ -16,7 +16,7 @@ args = [
 ]
 
 [run.check]
-files = ["${build_dir}/test_utils.fle"]
+files = ["${build_dir}/test_utils.fo"]
 return_code = 0
 
 [[run]]
@@ -32,7 +32,7 @@ args = [
 ]
 
 [run.check]
-files = ["${build_dir}/main1.fle"]
+files = ["${build_dir}/main1.fo"]
 return_code = 0
 
 [[run]]
@@ -48,7 +48,7 @@ args = [
 ]
 
 [run.check]
-files = ["${build_dir}/main2.fle"]
+files = ["${build_dir}/main2.fo"]
 return_code = 0
 
 [[run]]
@@ -64,16 +64,16 @@ args = [
 ]
 
 [run.check]
-files = ["${build_dir}/main3.fle"]
+files = ["${build_dir}/main3.fo"]
 return_code = 0
 
 [[run]]
 name = "Link program (test case 1)"
 command = "${root_dir}/ld"
 args = [
-    "${build_dir}/main1.fle",
-    "${build_dir}/test_utils.fle",
-    "${common_dir}/minilibc.fle",
+    "${build_dir}/main1.fo",
+    "${build_dir}/test_utils.fo",
+    "${common_dir}/minilibc.fo",
     "-o",
     "${build_dir}/program1",
 ]
@@ -86,9 +86,9 @@ return_code = 0
 name = "Link program (test case 2)"
 command = "${root_dir}/ld"
 args = [
-    "${build_dir}/main2.fle",
-    "${build_dir}/test_utils.fle",
-    "${common_dir}/minilibc.fle",
+    "${build_dir}/main2.fo",
+    "${build_dir}/test_utils.fo",
+    "${common_dir}/minilibc.fo",
     "-o",
     "${build_dir}/program2",
 ]
@@ -101,9 +101,9 @@ return_code = 0
 name = "Link program (test case 3)"
 command = "${root_dir}/ld"
 args = [
-    "${build_dir}/main3.fle",
-    "${build_dir}/test_utils.fle",
-    "${common_dir}/minilibc.fle",
+    "${build_dir}/main3.fo",
+    "${build_dir}/test_utils.fo",
+    "${common_dir}/minilibc.fo",
     "-o",
     "${build_dir}/program3",
 ]

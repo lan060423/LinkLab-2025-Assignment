@@ -18,6 +18,9 @@ readelf
 
 **/*.o
 **/*.fle
+**/*.fo
+**/*.fa
+**/*.fso
 
 .autograder_result
 .last_cxxflags

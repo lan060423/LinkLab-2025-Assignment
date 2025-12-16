@@ -15,8 +15,8 @@
 例如，要查看一个目标文件的内容：
 
 ```bash
-❯ ./readfle tests/cases/4-no-pie/build/main.fle
-File: main.fle
+❯ ./readfle tests/cases/4-no-pie/build/main.fo
+File: main.fo
 Type: .obj
 
 Sections:
@@ -46,7 +46,7 @@ Relocations:
 `disasm` 工具可以反汇编指定节的内容。对于代码段，它会显示汇编指令；对于数据段，它会以十六进制显示原始数据。每个指令或数据块旁边都会标注相关的符号和重定位信息。使用方法：
 
 ```bash
-❯ ./disasm tests/cases/4-no-pie/build/main.fle .text.startup      # 反汇编代码段
+❯ ./disasm tests/cases/4-no-pie/build/main.fo .text.startup      # 反汇编代码段
 Disassembly of section .text.startup:
 
 main:
@@ -60,7 +60,7 @@ main:
 001e: 48 83 c4 18                   add    $0x18,%rsp             
 0022: c3                            ret
 
-❯ ./disasm tests/cases/5-fpie/build/main.fle .rodata.str1.1       # 查看数据段内容
+❯ ./disasm tests/cases/5-fpie/build/main.fo .rodata.str1.1       # 查看数据段内容
 Disassembly of section .rodata.str1.1:
 
 .LC1:
@@ -161,8 +161,7 @@ python3 grader.py -l | source
 
 1. 手动运行链接器，查看具体输出：
 ```bash
-./ld ${TEST_BUILD}/a.fle ${TEST_BUILD}/b.fle -o ${TEST_BUILD}/out.fle
-```
+./ld ${TEST_BUILD}/a.fo ${TEST_BUILD}/b.fo -o ${TEST_BUILD}/out.fle
 
 2. 使用 `readfle` 和 `disasm` 检查输出文件：
 ```bash

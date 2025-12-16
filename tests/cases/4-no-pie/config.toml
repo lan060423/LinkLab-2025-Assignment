@@ -19,7 +19,7 @@ args = [
 
 [run.check]
 return_code = 0
-files = ["${build_dir}/foo.fle"]
+files = ["${build_dir}/foo.fo"]
 
 [[run]]
 name = "Compile main.c"
@@ -36,15 +36,15 @@ args = [
 ]
 
 [run.check]
-files = ["${build_dir}/main.fle"]
+files = ["${build_dir}/main.fo"]
 
 [[run]]
 name = "Link program"
 command = "${root_dir}/ld"
 args = [
-    "${build_dir}/main.fle",
-    "${build_dir}/foo.fle",
-    "${common_dir}/minilibc.fle",
+    "${build_dir}/main.fo",
+    "${build_dir}/foo.fo",
+    "${common_dir}/minilibc.fo",
     "-o",
     "${build_dir}/program",
 ]

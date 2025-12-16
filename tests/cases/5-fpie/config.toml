@@ -18,7 +18,7 @@ args = [
 ]
 
 [run.check]
-files = ["${build_dir}/mathlib.fle"]
+files = ["${build_dir}/mathlib.fo"]
 
 [[run]]
 name = "Compile mathlib_utils.c"
@@ -35,7 +35,7 @@ args = [
 ]
 
 [run.check]
-files = ["${build_dir}/mathlib_utils.fle"]
+files = ["${build_dir}/mathlib_utils.fo"]
 
 [[run]]
 name = "Compile main.c"
@@ -52,16 +52,16 @@ args = [
 ]
 
 [run.check]
-files = ["${build_dir}/main.fle"]
+files = ["${build_dir}/main.fo"]
 
 [[run]]
 name = "Link program"
 command = "${root_dir}/ld"
 args = [
-    "${build_dir}/main.fle",
-    "${build_dir}/mathlib.fle",
-    "${build_dir}/mathlib_utils.fle",
-    "${common_dir}/minilibc.fle",
+    "${build_dir}/main.fo",
+    "${build_dir}/mathlib.fo",
+    "${build_dir}/mathlib_utils.fo",
+    "${common_dir}/minilibc.fo",
     "-o",
     "${build_dir}/program",
 ]

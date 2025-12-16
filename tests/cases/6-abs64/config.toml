@@ -16,14 +16,14 @@ args = [
 ]
 
 [run.check]
-files = ["${build_dir}/main.fle"]
+files = ["${build_dir}/main.fo"]
 
 [[run]]
 name = "Link program"
 command = "${root_dir}/ld"
 args = [
-    "${build_dir}/main.fle",
-    "${common_dir}/minilibc.fle",
+    "${build_dir}/main.fo",
+    "${common_dir}/minilibc.fo",
     "-o",
     "${build_dir}/program",
 ]

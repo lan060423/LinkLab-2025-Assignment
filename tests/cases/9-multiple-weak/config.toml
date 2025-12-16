@@ -16,7 +16,7 @@ args = [
 ]
 
 [run.check]
-files = ["${build_dir}/main.fle"]
+files = ["${build_dir}/main.fo"]
 
 [[run]]
 name = "Compile weak1.c"
@@ -31,7 +31,7 @@ args = [
 ]
 
 [run.check]
-files = ["${build_dir}/weak1.fle"]
+files = ["${build_dir}/weak1.fo"]
 
 [[run]]
 name = "Compile weak2.c"
@@ -46,16 +46,16 @@ args = [
 ]
 
 [run.check]
-files = ["${build_dir}/weak2.fle"]
+files = ["${build_dir}/weak2.fo"]
 
 [[run]]
 name = "Link program"
 command = "${root_dir}/ld"
 args = [
-    "${build_dir}/main.fle",
-    "${build_dir}/weak1.fle",
-    "${build_dir}/weak2.fle",
-    "${common_dir}/minilibc.fle",
+    "${build_dir}/main.fo",
+    "${build_dir}/weak1.fo",
+    "${build_dir}/weak2.fo",
+    "${common_dir}/minilibc.fo",
     "-o",
     "${build_dir}/program",
 ]

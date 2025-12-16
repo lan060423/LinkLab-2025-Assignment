@@ -326,7 +326,7 @@ std::string find_library(const std::string& lib_name,
 void FLE_ar(const std::vector<std::string>& args)
 {
     if (args.size() < 2) {
-        throw std::runtime_error("Usage: ar <output.fle> <input1.fle> ...");
+        throw std::runtime_error("Usage: ar <output.fa> <input1.fo> ...");
     }
 
     std::string outfile = args[0];
@@ -384,14 +384,14 @@ int main(int argc, char* argv[])
     if (argc < 2) {
         std::cerr << "Usage: " << argv[0] << " <command> [args...]\n"
                   << "Commands:\n"
-                  << "  objdump <input.fle>              Display contents of FLE file\n"
-                  << "  nm <input.fle>                   Display symbol table\n"
-                  << "  ld [-o output.fle] input1.fle... Link FLE files\n"
+                  << "  objdump <input>                  Display contents of FLE file\n"
+                  << "  nm <input>                       Display symbol table\n"
+                  << "  ld [-o output] input1 input2...  Link FLE files (.fo/.fa/.fle)\n"
                   << "  exec <input.fle>                 Execute FLE file\n"
-                  << "  cc [-o output.fle] input.c...    Compile C files\n"
-                  << "  ar <output.fle> <input.fle>...   Create static archive\n"
-                  << "  readfle <input.fle>              Display FLE file information\n"
-                  << "  disasm <input.fle> <section>     Disassemble section\n";
+                  << "  cc [-o output.o] input.c...      Compile C files (outputs .fo)\n"
+                  << "  ar <output.fa> <input.fo>...     Create static archive\n"
+                  << "  readfle <input>                  Display FLE file information\n"
+                  << "  disasm <input> <section>         Disassemble section\n";
         return 1;
     }
 
@@ -401,14 +401,14 @@ int main(int argc, char* argv[])
     try {
         if (tool == "FLE_objdump") {
             if (args.size() != 1) {
-                throw std::runtime_error("Usage: objdump <input.fle>");
+                throw std::runtime_error("Usage: objdump <input>");
             }
             FLEWriter writer;
             FLE_objdump(load_fle(args[0]), writer);
             writer.write_to_file(args[0] + ".objdump");
         } else if (tool == "FLE_nm") {
             if (args.size() != 1) {
-                throw std::runtime_error("Usage: nm <input.fle>");
+                throw std::runtime_error("Usage: nm <input>");
             }
             FLE_nm(load_fle(args[0]));
         } else if (tool == "FLE_exec") {
@@ -472,12 +472,12 @@ int main(int argc, char* argv[])
             FLE_cc(args);
         } else if (tool == "FLE_readfle") {
             if (args.size() != 1) {
-                throw std::runtime_error("Usage: readfle <input.fle>");
+                throw std::runtime_error("Usage: readfle <input>");
             }
             FLE_readfle(load_fle(args[0]));
         } else if (tool == "FLE_disasm") {
             if (args.size() != 2) {
-                throw std::runtime_error("Usage: disasm <input.fle> <section>");
+                throw std::runtime_error("Usage: disasm <input> <section>");
             }
             FLE_disasm(load_fle(args[0]), args[1]);
         } else if (tool == "FLE_ar") {

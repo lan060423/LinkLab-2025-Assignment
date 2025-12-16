@@ -16,19 +16,19 @@ args = [
 ]
 
 [run.check]
-files = ["${build_dir}/lib.fle"]
+files = ["${build_dir}/lib.fo"]
 return_code = 0
 
 [[run]]
 name = "Create archive"
 command = "${root_dir}/ar"
 args = [
-    "${build_dir}/lib.a",
-    "${build_dir}/lib.fle",
+    "${build_dir}/lib.fa",
+    "${build_dir}/lib.fo",
 ]
 
 [run.check]
-files = ["${build_dir}/lib.a"]
+files = ["${build_dir}/lib.fa"]
 return_code = 0
 
 [[run]]
@@ -44,16 +44,16 @@ args = [
 ]
 
 [run.check]
-files = ["${build_dir}/main.fle"]
+files = ["${build_dir}/main.fo"]
 return_code = 0
 
 [[run]]
 name = "Link program"
 command = "${root_dir}/ld"
 args = [
-    "${build_dir}/main.fle",
-    "${build_dir}/lib.a",
-    "${common_dir}/minilibc.fle",
+    "${build_dir}/main.fo",
+    "${build_dir}/lib.fa",
+    "${common_dir}/minilibc.fo",
     "-o",
     "${build_dir}/program",
 ]

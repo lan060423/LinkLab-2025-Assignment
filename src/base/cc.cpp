@@ -341,7 +341,7 @@ void FLE_cc(const std::vector<std::string>& options)
 
     // 写入输出文件
     const std::filesystem::path input_path { binary };
-    const auto output_path = input_path.parent_path() / fmt::format("{}.fle", input_path.stem().string());
+    const auto output_path = input_path.parent_path() / fmt::format("{}.fo", input_path.stem().string());
     // std::cout << fmt::format("output_path: {}\n", output_path.string());
     writer.write_to_file(output_path.string());
 

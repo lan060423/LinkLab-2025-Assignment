@@ -10,12 +10,12 @@ args = ["${test_dir}/main.c", "-o", "${build_dir}/main.o", "-g"]
 
 [run.check]
 return_code = 0
-files = ["${build_dir}/main.fle"]
+files = ["${build_dir}/main.fo"]
 
 [[run]]
 name = "Run nm"
 command = "${root_dir}/nm"
-args = ["${build_dir}/main.fle"]
+args = ["${build_dir}/main.fo"]
 
 [run.check]
 special_judge = "judge.py"

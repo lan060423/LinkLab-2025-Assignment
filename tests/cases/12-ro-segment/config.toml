@@ -9,14 +9,14 @@ command = "${root_dir}/cc"
 args = ["${test_dir}/cake.c", "-o", "${build_dir}/cake.o", "-g"]
 [run.check]
 return_code = 0
-files = ["${build_dir}/cake.fle"]
+files = ["${build_dir}/cake.fo"]
 
 [[run]]
 name = "Link Cake"
 command = "${root_dir}/ld"
 args = [
-    "${build_dir}/cake.fle",
-    "${common_dir}/minilibc.fle",
+    "${build_dir}/cake.fo",
+    "${common_dir}/minilibc.fo",
     "-o",
     "${build_dir}/program",
 ]
