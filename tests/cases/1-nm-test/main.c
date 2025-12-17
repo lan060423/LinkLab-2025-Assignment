@@ -1,6 +1,6 @@
 // Global variables (strong)
-int global_var = 42;
-char global_array[] = "Hello";
+int global_gugugaga = 42;
+char global_array[] = "Hello, World!!!!!";
 
 // Weak global variable
 __attribute__((weak)) int weak_var = 100;
@@ -14,7 +14,7 @@ static int local_func(int x)
 // Global function
 int global_func(void)
 {
-    return local_func(global_var);
+    return local_func(global_gugugaga);
 }
 
 // Weak function
