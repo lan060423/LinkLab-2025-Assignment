@@ -53,6 +53,7 @@ return_code = 0
 name = "Execute program"
 command = "${root_dir}/exec"
 args = ["${build_dir}/program"]
+debug_step = "Link executable with shared library"
 score = 3
 [run.env]
 FLE_LIBRARY_PATH = "${build_dir}"

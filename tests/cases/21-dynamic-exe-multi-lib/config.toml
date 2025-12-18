@@ -90,6 +90,7 @@ special_judge = "judge.py"
 name = "Execute program"
 command = "${root_dir}/exec"
 args = ["${build_dir}/program"]
+debug_step = "Link executable with both libraries"
 score = 3
 [run.env]
 FLE_LIBRARY_PATH = "${build_dir}"

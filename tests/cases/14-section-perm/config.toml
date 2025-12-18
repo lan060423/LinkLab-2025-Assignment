@@ -118,6 +118,7 @@ command = "${root_dir}/exec"
 args = ["${build_dir}/program1"]
 score = 3.5
 must_pass = false
+debug_step = "Link program (test case 1)"
 
 [run.check]
 return_code = -11                # SIGSEGV when writing to read-only section
@@ -129,6 +130,7 @@ command = "${root_dir}/exec"
 args = ["${build_dir}/program2"]
 score = 3.5
 must_pass = false
+debug_step = "Link program (test case 2)"
 
 [run.check]
 return_code = -11                # SIGSEGV when executing data section
@@ -140,6 +142,7 @@ command = "${root_dir}/exec"
 args = ["${build_dir}/program3"]
 score = 3.0
 must_pass = false
+debug_step = "Link program (test case 3)"
 
 [run.check]
 return_code = -11                # SIGSEGV when writing to code section

@@ -14,14 +14,16 @@ from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 # --- BOOTSTRAP: Auto-setup environment ---
 import bootstrap
+
 bootstrap.initialize()
 # -----------------------------------------
 
 import tomli  # noqa: E402
 from rich.console import Console  # noqa: E402
 from rich.panel import Panel  # noqa: E402
-from rich.progress import Progress, SpinnerColumn, TextColumn  # noqa: E402
+from rich.progress import Progress, SpinnerColumn, Task, TextColumn  # noqa: E402
 from rich.table import Table  # noqa: E402
+from rich.text import Text  # noqa: E402
 
 
 @dataclass
@@ -189,6 +191,16 @@ class StandardOutputChecker:
         for var, value in replacements.items():
             path = path.replace(var, value)
         return path
+
+
+class StatusSpinnerColumn(SpinnerColumn):
+    """Spinner that swaps to a custom status icon when provided."""
+
+    def render(self, task: Task) -> Text:
+        icon = task.fields.get("status_icon")
+        if icon:
+            return Text.from_markup(icon)
+        return super().render(task)
 
 
 class SpecialJudgeChecker:
@@ -525,7 +537,7 @@ class TestRunner:
             self._resolve_path(str(arg), test.path, test.path)
             for arg in step.get("args", [])
         ]
-        
+
         # 构建环境变量
         step_env = os.environ.copy()
         if "env" in step:
@@ -884,9 +896,10 @@ class TableFormatter(ResultFormatter):
 class VSCodeConfigGenerator:
     """Generate and manage VS Code debug configurations"""
 
-    def __init__(self, project_root: Path, config: Config):
+    def __init__(self, project_root: Path, config: Config, verbose: bool = False):
         self.project_root = project_root
         self.config = config
+        self.verbose = verbose
         self.vscode_dir = project_root / ".vscode"
         self.launch_file = self.vscode_dir / "launch.json"
         self.tasks_file = self.vscode_dir / "tasks.json"
@@ -917,24 +930,43 @@ class VSCodeConfigGenerator:
         self, test_case: TestCase, failed_step: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         """Generate launch configuration based on debug type"""
+        target_step = failed_step
+
+        if "debug_step" in failed_step:
+            step_name = failed_step["debug_step"]
+            # 在测试步骤中查找匹配名字的步骤
+            found_step = next(
+                (s for s in test_case.run_steps if s.get("name") == step_name), None
+            )
+
+            if found_step:
+                if self.verbose:
+                    print(
+                        f"Step '{failed_step.get('name')}' failed. Using debug step '{step_name}'."
+                    )
+
+                target_step = found_step
+            else:
+                print(f"Warning: debug step '{step_name}' not found in steps.")
+
         debug_type = (
-            failed_step.get("debug", {}).get("type")
+            target_step.get("debug", {}).get("type")
             or test_case.meta.get("debug", {}).get("type")
             or self.config.debug_config["default_type"]
         )
 
         cwd = str(self.config.project_root)
         program = self._resolve_path(
-            failed_step["command"], test_case.path, self.config.project_root
+            target_step["command"], test_case.path, self.config.project_root
         )
         args = [
             self._resolve_path(arg, test_case.path, self.config.project_root)
-            for arg in failed_step.get("args", [])
+            for arg in target_step.get("args", [])
         ]
 
         if debug_type == "cpp":
             configs = []
-            base_name = f"Debug {test_case.meta['name']} - Step {failed_step.get('name', 'failed step')}"
+            base_name = f"Debug {test_case.meta['name']} - Step {target_step.get('name', 'failed step')}"
 
             # Add GDB configuration
             configs.append(
@@ -978,7 +1010,7 @@ class VSCodeConfigGenerator:
         elif debug_type == "python":
             return [
                 {
-                    "name": f"Debug {test_case.meta['name']} - Step {failed_step.get('name', 'failed step')}",
+                    "name": f"Debug {test_case.meta['name']} - Step {target_step.get('name', 'failed step')}",
                     "type": "python",
                     "request": "launch",
                     "program": program,
@@ -1126,7 +1158,7 @@ class Grader:
             JsonFormatter() if json_output else TableFormatter(self.console)
         )
         self.results: Dict[str, TestResult] = {}
-        self.vscode_generator = VSCodeConfigGenerator(Path.cwd(), self.config)
+        self.vscode_generator = VSCodeConfigGenerator(Path.cwd(), self.config, verbose=self.verbose)
 
     def _save_test_history(
         self,
@@ -1394,33 +1426,48 @@ class Grader:
             return True
 
         if self.console and not isinstance(self.console, type):
+            spinner_column = StatusSpinnerColumn()
             with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
+                spinner_column,
+                TextColumn("[progress.description]{task.description}", markup=True),
                 console=self.console,
             ) as progress:
                 total_steps = len(self.config.setup_steps)
                 task = progress.add_task(
                     f"Running setup steps [0/{total_steps}]...",
                     total=total_steps,
+                    status_icon="",
                 )
 
                 for i, step in enumerate(self.config.setup_steps, 1):
-                    step_name = step.get("message", "Setup step")
+                    step_label = step.get("name") or step.get("command") or "Setup step"
+                    running_text = step.get("message") or f"Running {step_label}..."
+                    success_text = (
+                        step.get("success_message") or f"{step_label} completed"
+                    )
+                    failure_text = step.get("failure_message") or f"{step_label} failed"
+                    step_prefix = f"Running setup steps [{i}/{total_steps}]: "
                     progress.update(
                         task,
-                        description=f"Running setup steps [{i}/{total_steps}]: {step_name}",
+                        description=f"{step_prefix}{running_text}",
                         completed=i - 1,
+                        status_icon="",
                     )
 
                     if not self._run_setup_step(step):
-                        progress.update(task, completed=total_steps)
+                        progress.update(
+                            task,
+                            description=f"{step_prefix}{failure_text}",
+                            completed=i,
+                            status_icon="[red]✗[/red]",
+                        )
                         return False
 
                     progress.update(
                         task,
-                        description=f"Running setup steps [{i}/{total_steps}]: {step_name}",
+                        description=f"{step_prefix}{success_text}",
                         completed=i,
+                        status_icon="[green]✓[/green]",
                     )
                 return True
         else:
@@ -1440,10 +1487,11 @@ class Grader:
 
             cmd = [step["command"]]
             if "args" in step:
-                if isinstance(step["args"], list):
-                    cmd.extend(step["args"])
-            else:
-                cmd.append(step["args"])
+                args = step["args"]
+                if isinstance(args, (list, tuple)):
+                    cmd.extend(str(arg) for arg in args)
+                elif args is not None:
+                    cmd.append(str(args))
 
             process = subprocess.run(
                 cmd,

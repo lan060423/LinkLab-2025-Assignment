@@ -73,6 +73,7 @@ files = ["${build_dir}/program"]
 name = "Run program"
 command = "${root_dir}/exec"
 args = ["${build_dir}/program"]
+debug_step = "Link program"
 
 [run.check]
 return_code = 0

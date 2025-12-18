@@ -93,6 +93,7 @@ return_code = 0
 name = "Execute program"
 command = "${root_dir}/exec"
 args = ["${build_dir}/program"]
+debug_step = "Link program"
 score = 5
 [run.check]
 return_code = 0

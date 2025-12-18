@@ -99,6 +99,7 @@ command = "${root_dir}/exec"
 args = ["${build_dir}/program2"]
 score = 5
 must_pass = false
+debug_step = "Link program2"
 
 [run.check]
 return_code = 0
