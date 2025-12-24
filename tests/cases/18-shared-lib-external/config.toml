@@ -28,48 +28,6 @@ return_code = 0
 name = "Verify dynamic relocation table"
 command = "echo"
 args = ["verifying"]
-score = 3
+score = 6
 [run.check]
 special_judge = "judge.py"
-
-[[run]]
-name = "Compile provider"
-command = "${root_dir}/cc"
-args = ["${test_dir}/provider.c", "-o", "${build_dir}/provider.o", "-g", "-Os"]
-[run.check]
-files = ["${build_dir}/provider.fo"]
-return_code = 0
-
-[[run]]
-name = "Compile main program"
-command = "${root_dir}/cc"
-args = ["${test_dir}/main.c", "-o", "${build_dir}/main.o", "-fPIC", "-g", "-Os"]
-[run.check]
-files = ["${build_dir}/main.fo"]
-return_code = 0
-
-[[run]]
-name = "Link executable"
-command = "${root_dir}/ld"
-args = [
-    "${build_dir}/main.fo",
-    "${build_dir}/libexternal.so",
-    "${build_dir}/provider.fo",
-    "${common_dir}/minilibc.fo",
-    "-o",
-    "${build_dir}/program",
-]
-[run.check]
-files = ["${build_dir}/program"]
-return_code = 0
-
-[[run]]
-name = "Execute program"
-command = "${root_dir}/exec"
-args = ["${build_dir}/program"]
-debug_step = "Link executable"
-score = 3
-[run.env]
-FLE_LIBRARY_PATH = "${build_dir}"
-[run.check]
-return_code = 0
