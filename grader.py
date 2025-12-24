@@ -566,8 +566,10 @@ class TestRunner:
                     self.console.print(process.stderr)
                 self.console.print(f"[bold]Return Code:[/bold] {process.returncode}\n")
 
-        except subprocess.TimeoutExpired:
-            return self._create_timeout_result(test, step, step_index, start_time)
+        except subprocess.TimeoutExpired as e:
+            return self._create_timeout_result(
+                test, step, step_index, start_time, e.stdout, e.stderr
+            )
 
         # 在no_check模式下，只要命令执行成功就认为通过
         if self.no_check:
@@ -652,7 +654,13 @@ class TestRunner:
             return f.read()
 
     def _create_timeout_result(
-        self, test: TestCase, step: Dict[str, Any], step_index: int, start_time: float
+        self,
+        test: TestCase,
+        step: Dict[str, Any],
+        step_index: int,
+        start_time: float,
+        stdout: Optional[str] = None,
+        stderr: Optional[str] = None,
     ) -> TestResult:
         error_message = f"Step {step_index} '{step.get('name', step['command'])}' timed out after {step.get('timeout', 5.0)}s"
         # 构造命令字符串
@@ -665,18 +673,25 @@ class TestRunner:
                 ]
             )
         command_str = " ".join(cmd)
+
+        error_details = {
+            "step": step_index,
+            "step_name": step.get("name", step["command"]),
+            "error_message": error_message,
+            "command": command_str,  # 添加实际运行的命令
+        }
+        if stdout:
+            error_details["stdout"] = stdout
+        if stderr:
+            error_details["stderr"] = stderr
+
         return TestResult(
             success=False,
             message=error_message,
             time=time.perf_counter() - start_time,
             score=0,
             max_score=step.get("score", test.meta["score"]),
-            error_details={
-                "step": step_index,
-                "step_name": step.get("name", step["command"]),
-                "error_message": error_message,
-                "command": command_str,  # 添加实际运行的命令
-            },
+            error_details=error_details,
         )
 
     def _create_failure_result(
