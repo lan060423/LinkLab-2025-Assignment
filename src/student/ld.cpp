@@ -25,6 +25,10 @@ static bool starts_with(const std::string& str, const std::string& prefix) {
     return str.size() >= prefix.size() && str.compare(0, prefix.size(), prefix) == 0;
 }
 
+static uint64_t align_up(uint64_t addr, uint64_t align = 4096) {
+    return (addr + align - 1) / align * align;
+}
+
 /*
 核心逻辑：根据输入节的名字确定它所属的输出分类
 */
@@ -33,7 +37,7 @@ static std::string get_output_section_name(const std::string& name) {
     if (starts_with(name, ".rodata")) return ".rodata";
     if (starts_with(name, ".data")) return ".data";
     if (starts_with(name, ".bss")) return ".bss";
-    return ".data"; //默认归类为数据段
+    return ".data"; 
 }
 
 struct ResolvedSymbol {
@@ -41,7 +45,6 @@ struct ResolvedSymbol {
     SymbolType type;
 };
 
-//记录输入节在输出节中的位置信息
 struct SectionLocation {
     std::string out_sec_name;
     uint64_t offset_in_out_sec;
@@ -54,38 +57,59 @@ FLEObject FLE_ld(const std::vector<FLEObject>& objects, const LinkerOptions& opt
     executable.name = options.outputFile;
 
     //扫描并合并节：按类别分组
-    //定义输出节的顺序，保证布局稳定
+    //强制顺序：.text -> .rodata -> .data -> .bss
     std::vector<std::string> out_sec_order = {".text", ".rodata", ".data", ".bss"};
     std::map<std::string, std::vector<uint8_t>> out_sec_buffers;
-    //key: {file_idx, input_sec_name} -> {output_sec_name, offset_in_buffer}
+    std::map<std::string, uint64_t> out_sec_virtual_sizes; //记录内存中的实际大小
     std::map<std::pair<size_t, std::string>, SectionLocation> sec_map;
 
+    //第一步：合并节，使用 shdrs 获取真实大小
     for (size_t i = 0; i < objects.size(); ++i) {
+        //预先建立一个节名到大小的映射，从shdrs中获取
+        std::map<std::string, uint64_t> actual_sizes;
+        for (const auto& shdr : objects[i].shdrs) {
+            actual_sizes[shdr.name] = shdr.size;
+        }
+
         for (const auto& [name, sec] : objects[i].sections) {
             std::string out_name = get_output_section_name(name);
-            uint64_t current_offset = out_sec_buffers[out_name].size();
+            uint64_t sz = 0;
             
+            //如果 shdr 中有大小，优先使用 shdr 的大小
+            if (actual_sizes.count(name)) {
+                sz = actual_sizes[name];
+            } else {
+                sz = sec.data.size();
+            }
+
+            uint64_t current_offset = out_sec_virtual_sizes[out_name];
             sec_map[{i, name}] = {out_name, current_offset};
-            out_sec_buffers[out_name].insert(
-                out_sec_buffers[out_name].end(), 
-                sec.data.begin(), 
-                sec.data.end()
-            );
+
+            if (out_name != ".bss" && !sec.data.empty()) {
+                out_sec_buffers[out_name].insert(
+                    out_sec_buffers[out_name].end(), 
+                    sec.data.begin(), 
+                    sec.data.end()
+                );
+            }
+            out_sec_virtual_sizes[out_name] += sz;
         }
     }
 
-    //规划内存布局：计算每个输出节的起始 VAddr
+    //规划内存布局：实施 4KB 对齐
     uint64_t current_vaddr = 0x400000;
     std::map<std::string, uint64_t> out_sec_vaddrs;
 
     for (const auto& name : out_sec_order) {
-        if (out_sec_buffers.count(name) && !out_sec_buffers[name].empty()) {
+        if (out_sec_virtual_sizes.count(name) && out_sec_virtual_sizes[name] > 0) {
+            //每个段的起始地址都对齐到4KB边界
+            current_vaddr = align_up(current_vaddr);
             out_sec_vaddrs[name] = current_vaddr;
-            current_vaddr += out_sec_buffers[name].size();
+            current_vaddr += out_sec_virtual_sizes[name];
         }
     }
 
-    //符号决议：计算符号的绝对虚拟地址
+    //符号决议：计算绝对虚拟地址
     std::map<std::string, ResolvedSymbol> global_sym_table;
     std::vector<std::map<std::string, uint64_t>> local_sym_tables(objects.size());
 
@@ -113,10 +137,14 @@ FLEObject FLE_ld(const std::vector<FLEObject>& objects, const LinkerOptions& opt
         }
     }
 
-    //重定位：在正确的输出buffer中修改数据
+    //重定位
     for (size_t i = 0; i < objects.size(); ++i) {
         for (const auto& [name, sec] : objects[i].sections) {
             auto loc = sec_map[{i, name}];
+            //如果重定位发生在.bss 节中，这是异常的（BSS通常无代码/数据）
+            //绝大多数重定位发生在 .text 或 .data 中
+            if (loc.out_sec_name == ".bss") continue; 
+
             uint64_t out_sec_base = out_sec_vaddrs[loc.out_sec_name];
             std::vector<uint8_t>& buffer = out_sec_buffers[loc.out_sec_name];
 
@@ -147,25 +175,34 @@ FLEObject FLE_ld(const std::vector<FLEObject>& objects, const LinkerOptions& opt
         }
     }
 
-    //组装输出FLEObject和Program Headers
+    //构建输出FLEObject和权限设置
     for (const auto& name : out_sec_order) {
-        if (out_sec_buffers.count(name) && !out_sec_buffers[name].empty()) {
+        if (out_sec_virtual_sizes.count(name) && out_sec_virtual_sizes[name] > 0) {
             FLESection out_sec;
             out_sec.name = name;
-            out_sec.data = std::move(out_sec_buffers[name]);
+            //只有非 BSS 段才复制数据到section.data
+            if (name != ".bss") {
+                out_sec.data = std::move(out_sec_buffers[name]);
+            }
             executable.sections[name] = out_sec;
 
             ProgramHeader phdr;
             phdr.name = name;
             phdr.vaddr = out_sec_vaddrs[name];
-            phdr.size = executable.sections[name].data.size();
-            //task5要求暂时统一设为RWX
-            phdr.flags = (uint32_t)PHF::R | (uint32_t)PHF::W | (uint32_t)PHF::X;
+            phdr.size = out_sec_virtual_sizes[name]; //记录内存中的大小
+
+            //设置精细化的权限
+            if (name == ".text") {
+                phdr.flags = PHF::R | PHF::X;  //代码段：只读，可执行 (r-x)
+            } else if (name == ".rodata") {
+                phdr.flags = static_cast<uint32_t>(PHF::R);//只读数据：只读 (r--)，单个PHF枚举值需要显式强转为uint32_t
+            } else if (name == ".data" || name == ".bss") {
+                phdr.flags = PHF::R | PHF::W;  //读写数据：可读写，不可执行 (rw-)
+            }
             executable.phdrs.push_back(phdr);
         }
     }
 
-    //设置入口点
     if (global_sym_table.count(options.entryPoint)) {
         executable.entry = global_sym_table[options.entryPoint].vaddr;
     } else if (!options.shared) {
