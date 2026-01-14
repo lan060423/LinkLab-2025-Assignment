@@ -4,7 +4,8 @@
 #include <map>
 #include <stdexcept>
 #include <vector>
-#include <cstring>
+#include <string>
+#include <algorithm>
 
 /*
 辅助函数：将数值以小端序写入字节数组
@@ -17,10 +18,33 @@ void write_le(std::vector<uint8_t>& data, size_t offset, uint64_t value, size_t 
     }
 }
 
-//记录已解析符号的信息
+/*
+辅助函数：判断前缀
+*/
+static bool starts_with(const std::string& str, const std::string& prefix) {
+    return str.size() >= prefix.size() && str.compare(0, prefix.size(), prefix) == 0;
+}
+
+/*
+核心逻辑：根据输入节的名字确定它所属的输出分类
+*/
+static std::string get_output_section_name(const std::string& name) {
+    if (starts_with(name, ".text")) return ".text";
+    if (starts_with(name, ".rodata")) return ".rodata";
+    if (starts_with(name, ".data")) return ".data";
+    if (starts_with(name, ".bss")) return ".bss";
+    return ".data"; //默认归类为数据段
+}
+
 struct ResolvedSymbol {
     uint64_t vaddr;
     SymbolType type;
+};
+
+//记录输入节在输出节中的位置信息
+struct SectionLocation {
+    std::string out_sec_name;
+    uint64_t offset_in_out_sec;
 };
 
 FLEObject FLE_ld(const std::vector<FLEObject>& objects, const LinkerOptions& options)
@@ -29,123 +53,121 @@ FLEObject FLE_ld(const std::vector<FLEObject>& objects, const LinkerOptions& opt
     executable.type = ".exe";
     executable.name = options.outputFile;
 
-    const uint64_t BASE_ADDR = 0x400000;
-    
-    //记录每个节在合并后的全局buffer中的偏移
-    std::map<std::pair<size_t, std::string>, uint64_t> section_offsets;
-    std::vector<uint8_t> merged_data;
+    //扫描并合并节：按类别分组
+    //定义输出节的顺序，保证布局稳定
+    std::vector<std::string> out_sec_order = {".text", ".rodata", ".data", ".bss"};
+    std::map<std::string, std::vector<uint8_t>> out_sec_buffers;
+    //key: {file_idx, input_sec_name} -> {output_sec_name, offset_in_buffer}
+    std::map<std::pair<size_t, std::string>, SectionLocation> sec_map;
 
     for (size_t i = 0; i < objects.size(); ++i) {
-        for (const auto& [sec_name, sec_data] : objects[i].sections) {
-            section_offsets[{i, sec_name}] = merged_data.size();
-            merged_data.insert(merged_data.end(), sec_data.data.begin(), sec_data.data.end());
+        for (const auto& [name, sec] : objects[i].sections) {
+            std::string out_name = get_output_section_name(name);
+            uint64_t current_offset = out_sec_buffers[out_name].size();
+            
+            sec_map[{i, name}] = {out_name, current_offset};
+            out_sec_buffers[out_name].insert(
+                out_sec_buffers[out_name].end(), 
+                sec.data.begin(), 
+                sec.data.end()
+            );
         }
     }
 
-    //符号决议逻辑
-    std::map<std::string, ResolvedSymbol> global_symbol_table;
-    //local_symbols[file_index][symbol_name] = vaddr
-    std::vector<std::map<std::string, uint64_t>> local_symbol_tables(objects.size());
+    //规划内存布局：计算每个输出节的起始 VAddr
+    uint64_t current_vaddr = 0x400000;
+    std::map<std::string, uint64_t> out_sec_vaddrs;
+
+    for (const auto& name : out_sec_order) {
+        if (out_sec_buffers.count(name) && !out_sec_buffers[name].empty()) {
+            out_sec_vaddrs[name] = current_vaddr;
+            current_vaddr += out_sec_buffers[name].size();
+        }
+    }
+
+    //符号决议：计算符号的绝对虚拟地址
+    std::map<std::string, ResolvedSymbol> global_sym_table;
+    std::vector<std::map<std::string, uint64_t>> local_sym_tables(objects.size());
 
     for (size_t i = 0; i < objects.size(); ++i) {
         for (const auto& sym : objects[i].symbols) {
-            //跳过未定义符号
             if (sym.type == SymbolType::UNDEFINED || sym.section.empty()) continue;
 
-            uint64_t vaddr = BASE_ADDR + section_offsets[{i, sym.section}] + sym.offset;
+            auto loc = sec_map[{i, sym.section}];
+            uint64_t sym_vaddr = out_sec_vaddrs[loc.out_sec_name] + loc.offset_in_out_sec + sym.offset;
 
             if (sym.type == SymbolType::LOCAL) {
-                //局部符号：存入文件私有表，不参与全局冲突检查
-                local_symbol_tables[i][sym.name] = vaddr;
-            } 
-            else if (sym.type == SymbolType::GLOBAL || sym.type == SymbolType::WEAK) {
-                //全局符号决议规则
-                if (global_symbol_table.count(sym.name)) {
-                    SymbolType existing_type = global_symbol_table[sym.name].type;
-
-                    if (sym.type == SymbolType::GLOBAL && existing_type == SymbolType::GLOBAL) {
-                        //两个强符号冲突
+                local_sym_tables[i][sym.name] = sym_vaddr;
+            } else {
+                if (global_sym_table.count(sym.name)) {
+                    if (sym.type == SymbolType::GLOBAL && global_sym_table[sym.name].type == SymbolType::GLOBAL) {
                         throw std::runtime_error("Multiple definition of strong symbol: " + sym.name);
-                    } 
-                    else if (sym.type == SymbolType::GLOBAL && existing_type == SymbolType::WEAK) {
-                        //强符号覆盖弱符号
-                        global_symbol_table[sym.name] = {vaddr, sym.type};
                     }
-                    //其他情况（弱遇强、弱遇弱）保持现有符号不变
+                    if (sym.type == SymbolType::GLOBAL) {
+                        global_sym_table[sym.name] = {sym_vaddr, sym.type};
+                    }
                 } else {
-                    //新符号，直接加入
-                    global_symbol_table[sym.name] = {vaddr, sym.type};
+                    global_sym_table[sym.name] = {sym_vaddr, sym.type};
                 }
             }
         }
     }
 
-    //处理重定位并检查未定义符号
+    //重定位：在正确的输出buffer中修改数据
     for (size_t i = 0; i < objects.size(); ++i) {
-        for (const auto& [sec_name, sec_data] : objects[i].sections) {
-            uint64_t sec_base_in_merged = section_offsets[{i, sec_name}];
+        for (const auto& [name, sec] : objects[i].sections) {
+            auto loc = sec_map[{i, name}];
+            uint64_t out_sec_base = out_sec_vaddrs[loc.out_sec_name];
+            std::vector<uint8_t>& buffer = out_sec_buffers[loc.out_sec_name];
 
-            for (const auto& reloc : sec_data.relocs) {
+            for (const auto& reloc : sec.relocs) {
                 uint64_t S = 0;
-                bool found = false;
-
-                //优先查找本文件的局部符号
-                if (local_symbol_tables[i].count(reloc.symbol)) {
-                    S = local_symbol_tables[i][reloc.symbol];
-                    found = true;
-                } 
-                //其次查找全局符号表
-                else if (global_symbol_table.count(reloc.symbol)) {
-                    S = global_symbol_table[reloc.symbol].vaddr;
-                    found = true;
-                }
-
-                if (!found) {
+                if (local_sym_tables[i].count(reloc.symbol)) {
+                    S = local_sym_tables[i][reloc.symbol];
+                } else if (global_sym_table.count(reloc.symbol)) {
+                    S = global_sym_table[reloc.symbol].vaddr;
+                } else {
                     throw std::runtime_error("Undefined symbol: " + reloc.symbol);
                 }
 
+                uint64_t P = out_sec_base + loc.offset_in_out_sec + reloc.offset;
                 int64_t A = reloc.addend;
-                uint64_t P = BASE_ADDR + sec_base_in_merged + reloc.offset;
-                uint64_t result_val = 0;
-                size_t write_size = 0;
+                uint64_t val = 0;
+                size_t sz = 0;
 
                 switch (reloc.type) {
                     case RelocationType::R_X86_64_32:
-                    case RelocationType::R_X86_64_32S:
-                        result_val = S + A;
-                        write_size = 4;
-                        break;
-                    case RelocationType::R_X86_64_64:
-                        result_val = S + A;
-                        write_size = 8;
-                        break;
-                    case RelocationType::R_X86_64_PC32:
-                        result_val = (uint64_t)((int64_t)S + A - (int64_t)P);
-                        write_size = 4;
-                        break;
+                    case RelocationType::R_X86_64_32S: val = S + A; sz = 4; break;
+                    case RelocationType::R_X86_64_64:  val = S + A; sz = 8; break;
+                    case RelocationType::R_X86_64_PC32: val = S + A - P; sz = 4; break;
                     default: continue;
                 }
-                write_le(merged_data, sec_base_in_merged + reloc.offset, result_val, write_size);
+                write_le(buffer, loc.offset_in_out_sec + reloc.offset, val, sz);
             }
         }
     }
 
-    //构建输出结果
-    FLESection load_section;
-    load_section.name = ".load";
-    load_section.data = std::move(merged_data);
-    executable.sections[".load"] = load_section;
+    //组装输出FLEObject和Program Headers
+    for (const auto& name : out_sec_order) {
+        if (out_sec_buffers.count(name) && !out_sec_buffers[name].empty()) {
+            FLESection out_sec;
+            out_sec.name = name;
+            out_sec.data = std::move(out_sec_buffers[name]);
+            executable.sections[name] = out_sec;
 
-    ProgramHeader phdr;
-    phdr.name = ".load";
-    phdr.vaddr = BASE_ADDR;
-    phdr.size = executable.sections[".load"].data.size();
-    phdr.flags = (uint32_t)PHF::R | (uint32_t)PHF::W | (uint32_t)PHF::X;
-    executable.phdrs.push_back(phdr);
+            ProgramHeader phdr;
+            phdr.name = name;
+            phdr.vaddr = out_sec_vaddrs[name];
+            phdr.size = executable.sections[name].data.size();
+            //task5要求暂时统一设为RWX
+            phdr.flags = (uint32_t)PHF::R | (uint32_t)PHF::W | (uint32_t)PHF::X;
+            executable.phdrs.push_back(phdr);
+        }
+    }
 
-    //检查入口点
-    if (global_symbol_table.count(options.entryPoint)) {
-        executable.entry = global_symbol_table[options.entryPoint].vaddr;
+    //设置入口点
+    if (global_sym_table.count(options.entryPoint)) {
+        executable.entry = global_sym_table[options.entryPoint].vaddr;
     } else if (!options.shared) {
         throw std::runtime_error("Undefined symbol: " + options.entryPoint);
     }
