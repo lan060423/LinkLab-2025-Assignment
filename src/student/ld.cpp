@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <set>
 
 /*
 辅助函数：将数值以小端序写入字节数组
@@ -26,11 +27,12 @@ static bool starts_with(const std::string& str, const std::string& prefix) {
 }
 
 static uint64_t align_up(uint64_t addr, uint64_t align = 4096) {
+    if (align == 0) return addr;
     return (addr + align - 1) / align * align;
 }
 
 /*
-核心逻辑：根据输入节的名字确定它所属的输出分类
+根据输入节的名字确定它所属的输出分类
 */
 static std::string get_output_section_name(const std::string& name) {
     if (starts_with(name, ".text")) return ".text";
@@ -50,8 +52,91 @@ struct SectionLocation {
     uint64_t offset_in_out_sec;
 };
 
+/*
+追踪符号状态
+*/
+struct SymbolStatus {
+    std::set<std::string> defined;
+    std::set<std::string> undefined;
+
+    //分析一个对象，更新定义和未定义集合
+    void add_object_symbols(const FLEObject& obj) {
+        //记录该对象定义的符号
+        for (const auto& sym : obj.symbols) {
+            if (sym.type != SymbolType::UNDEFINED && !sym.section.empty()) {
+                defined.insert(sym.name);
+                //如果该符号之前是未定义的，现在找到了定义，从未定义集合中移除
+                undefined.erase(sym.name);
+            } else if (sym.type == SymbolType::UNDEFINED) {
+                //如果是显式的未定义符号，且当前未被定义，加入未定义集合
+                if (defined.find(sym.name) == defined.end()) {
+                    undefined.insert(sym.name);
+                }
+            }
+        }
+        //扫描重定位表，这些也是未定义引用
+        for (const auto& [name, sec] : obj.sections) {
+            for (const auto& reloc : sec.relocs) {
+                if (defined.find(reloc.symbol) == defined.end()) {
+                    undefined.insert(reloc.symbol);
+                }
+            }
+        }
+    }
+};
+
 FLEObject FLE_ld(const std::vector<FLEObject>& objects, const LinkerOptions& options)
 {
+    std::vector<FLEObject> selected_objects;
+    SymbolStatus status;
+    std::set<std::string> included_member_names; //防止重复添加库成员
+
+    //初始状态：入口点是未定义的
+    status.undefined.insert(options.entryPoint);
+
+    for (const auto& obj : objects) {
+        if (obj.type == ".obj") {
+            selected_objects.push_back(obj);
+            status.add_object_symbols(obj);
+        }
+    }
+
+    //迭代扫描.ar归档文件
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (const auto& input : objects) {
+            if (input.type == ".ar") {
+                for (const auto& member : input.members) {
+                    //如果该成员已经被包含了，跳过
+                    //使用name来去重
+                    if (included_member_names.count(member.name)) {
+                        continue;
+                    }
+
+                    //检查该成员是否解决了当前的某个未定义符号
+                    bool needed = false;
+                    for (const auto& sym : member.symbols) {
+                        if (sym.type != SymbolType::UNDEFINED && !sym.section.empty()) {
+                            if (status.undefined.count(sym.name)) {
+                                needed = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    //如果需要该成员，将其提取并加入链接列表
+                    if (needed) {
+                        selected_objects.push_back(member);
+                        status.add_object_symbols(member); //更新符号状态
+                        included_member_names.insert(member.name);
+                        changed = true; //状态发生改变，需要继续扫描
+                    }
+                }
+            }
+        }
+    }
+
     FLEObject executable;
     executable.type = ".exe";
     executable.name = options.outputFile;
@@ -64,14 +149,15 @@ FLEObject FLE_ld(const std::vector<FLEObject>& objects, const LinkerOptions& opt
     std::map<std::pair<size_t, std::string>, SectionLocation> sec_map;
 
     //第一步：合并节，使用 shdrs 获取真实大小
-    for (size_t i = 0; i < objects.size(); ++i) {
+    //注意：这里遍历的是 selected_objects 而不是 objects
+    for (size_t i = 0; i < selected_objects.size(); ++i) {
         //预先建立一个节名到大小的映射，从shdrs中获取
         std::map<std::string, uint64_t> actual_sizes;
-        for (const auto& shdr : objects[i].shdrs) {
+        for (const auto& shdr : selected_objects[i].shdrs) {
             actual_sizes[shdr.name] = shdr.size;
         }
 
-        for (const auto& [name, sec] : objects[i].sections) {
+        for (const auto& [name, sec] : selected_objects[i].sections) {
             std::string out_name = get_output_section_name(name);
             uint64_t sz = 0;
             
@@ -111,14 +197,17 @@ FLEObject FLE_ld(const std::vector<FLEObject>& objects, const LinkerOptions& opt
 
     //符号决议：计算绝对虚拟地址
     std::map<std::string, ResolvedSymbol> global_sym_table;
-    std::vector<std::map<std::string, uint64_t>> local_sym_tables(objects.size());
+    std::vector<std::map<std::string, uint64_t>> local_sym_tables(selected_objects.size());
 
-    for (size_t i = 0; i < objects.size(); ++i) {
-        for (const auto& sym : objects[i].symbols) {
+    //注意：这里遍历的是 selected_objects
+    for (size_t i = 0; i < selected_objects.size(); ++i) {
+        for (const auto& sym : selected_objects[i].symbols) {
             if (sym.type == SymbolType::UNDEFINED || sym.section.empty()) continue;
 
             auto loc = sec_map[{i, sym.section}];
-            uint64_t sym_vaddr = out_sec_vaddrs[loc.out_sec_name] + loc.offset_in_out_sec + sym.offset;
+            //确保基址存在（即使段大小为0或被优化掉）
+            uint64_t base = out_sec_vaddrs.count(loc.out_sec_name) ? out_sec_vaddrs[loc.out_sec_name] : 0;
+            uint64_t sym_vaddr = base + loc.offset_in_out_sec + sym.offset;
 
             if (sym.type == SymbolType::LOCAL) {
                 local_sym_tables[i][sym.name] = sym_vaddr;
@@ -138,11 +227,11 @@ FLEObject FLE_ld(const std::vector<FLEObject>& objects, const LinkerOptions& opt
     }
 
     //重定位
-    for (size_t i = 0; i < objects.size(); ++i) {
-        for (const auto& [name, sec] : objects[i].sections) {
+    //注意：这里遍历的是 selected_objects
+    for (size_t i = 0; i < selected_objects.size(); ++i) {
+        for (const auto& [name, sec] : selected_objects[i].sections) {
             auto loc = sec_map[{i, name}];
-            //如果重定位发生在.bss 节中，这是异常的（BSS通常无代码/数据）
-            //绝大多数重定位发生在 .text 或 .data 中
+            //如果重定位发生在.bss 节中，跳过
             if (loc.out_sec_name == ".bss") continue; 
 
             uint64_t out_sec_base = out_sec_vaddrs[loc.out_sec_name];
